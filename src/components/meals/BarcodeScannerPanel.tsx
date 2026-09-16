@@ -35,6 +35,9 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [torchSupported, setTorchSupported] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
+  // דיאגנוסטיקה זמנית על המסך: אם frameCount נשאר 0, הבעיה בקבלת פריימים מהמצלמה עצמה (לא בפענוח).
+  // אם frameCount עולה אבל lastError תמיד NotFoundException, זו קושי אמיתי בזיהוי (מרחק/תאורה/מיקוד).
+  const [debugInfo, setDebugInfo] = useState({ frames: 0, lastError: '', videoSize: '' })
 
   useEffect(() => {
     if (!active) return
@@ -45,6 +48,8 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
     setErrorMessage(null)
     setTorchSupported(false)
     setTorchOn(false)
+    let frameCount = 0
+    setDebugInfo({ frames: 0, lastError: '', videoSize: '' })
 
     const hints = new Map()
     hints.set(DecodeHintType.POSSIBLE_FORMATS, POSSIBLE_FORMATS)
@@ -52,7 +57,7 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
     const reader = new BrowserMultiFormatReader(hints)
 
     reader
-      .decodeFromConstraints({ video: VIDEO_CONSTRAINTS }, videoRef.current ?? undefined, (result, _err, controls) => {
+      .decodeFromConstraints({ video: VIDEO_CONSTRAINTS }, videoRef.current ?? undefined, (result, err, controls) => {
         if (cancelled) {
           controls.stop()
           return
@@ -61,6 +66,15 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
           grantedAnnouncedRef.current = true
           setPermissionState('granted')
           setTorchSupported(typeof controls.switchTorch === 'function')
+        }
+        frameCount++
+        const video = videoRef.current
+        if (frameCount % 10 === 0 || result) {
+          setDebugInfo({
+            frames: frameCount,
+            lastError: err ? err.constructor.name : '',
+            videoSize: video ? `${video.videoWidth}x${video.videoHeight}` : '',
+          })
         }
         if (!result) return // NotFoundException על כל פריים בלי ברקוד — צפוי, לא שגיאה.
         const text = result.getText()
@@ -148,6 +162,12 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
           </button>
         )}
       </div>
+
+      {permissionState === 'granted' && (
+        <p className="text-center font-mono text-micro text-ink-400" dir="ltr">
+          frames: {debugInfo.frames} · video: {debugInfo.videoSize || '?'} · last: {debugInfo.lastError || '—'}
+        </p>
+      )}
 
       {errorMessage && (
         <p className="flex items-center gap-1.5 text-caption font-medium text-coral-600" role="alert">
