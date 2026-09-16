@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType } from '@zxing/library'
-import type { IScannerControls } from '@zxing/browser'
+import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
+import { BarcodeFormat, DecodeHintType, NotFoundException } from '@zxing/library'
 import { Button } from '@/components/ui/Button'
 import { AlertCircle, Zap, ZapOff, VideoOff, Keyboard } from '@/components/ui/icons'
 
@@ -16,9 +15,6 @@ type PermissionState = 'requesting' | 'granted' | 'error'
 
 const POSSIBLE_FORMATS = [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A]
 
-// facingMode בלבד (בלי רזולוציה) משאיר לדפדפן לבחור סטרים ברירת מחדל, שלעיתים נמוך/מטושטש מדי
-// לפענוח ברקוד. מבקשים רזולוציה גבוהה ופוקוס רציף במפורש; advanced מתעלם בבטחה מאילוצים
-// שהמכשיר לא תומך בהם (לא זורק שגיאה כמו אילוץ exact/mandatory היה עושה).
 const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
   facingMode: 'environment',
   width: { ideal: 1920 },
@@ -26,79 +22,131 @@ const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
   advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
 }
 
+// אזור הסריקה בפועל (ROI) כאחוז מהפריים המלא, תואם ויזואלית למסגרת הכיוון על המסך.
+//
+// הגרסה הקודמת סרקה את הפריים המלא (1920x1080) עם TRY_HARDER — כל ניסיון פענוח היה
+// איטי, ולכן היו מעט ניסיונות בשנייה. בפועל זה הרגיש כאילו המצלמה "רק מסתכלת" בלי
+// לזהות: לתפוס ברקוד עם מעט מאוד ניסיונות איטיים דורש שהפריים היחיד שכן נבדק יהיה
+// גם חד וגם ממורכז בול. הפתרון שמשתמשים בו סורקי ברקוד אמיתיים: לחתוך רק אזור קטן
+// במרכז (בעל רזולוציה מספקת כי הצילום המקורי באיכות גבוהה) ולהריץ עליו הרבה ניסיונות
+// מהירים ברצף — כך יש הרבה יותר "הזדמנויות תפיסה" בשנייה במקום מעט איטיות.
+const ROI_WIDTH_RATIO = 0.85
+const ROI_HEIGHT_RATIO = 0.32
+const SCAN_INTERVAL_MS = 100
+
 export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const controlsRef = useRef<IScannerControls | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const lastDetectedRef = useRef<string | null>(null)
-  const grantedAnnouncedRef = useRef(false)
   const [permissionState, setPermissionState] = useState<PermissionState>('requesting')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [torchSupported, setTorchSupported] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
-  // דיאגנוסטיקה זמנית על המסך: אם frameCount נשאר 0, הבעיה בקבלת פריימים מהמצלמה עצמה (לא בפענוח).
-  // אם frameCount עולה אבל lastError תמיד NotFoundException, זו קושי אמיתי בזיהוי (מרחק/תאורה/מיקוד).
-  const [debugInfo, setDebugInfo] = useState({ frames: 0, lastError: '', videoSize: '' })
+  // דיאגנוסטיקה על המסך: attempts עולה אם ניסיונות פענוח בכלל רצים; video מראה את הרזולוציה
+  // שהמצלמה סיפקה בפועל (לא בהכרח מה שביקשנו כ-ideal).
+  const [debugInfo, setDebugInfo] = useState({ attempts: 0, videoSize: '', lastError: '' })
 
   useEffect(() => {
     if (!active) return
     let cancelled = false
+    let rafId = 0
+    let timeoutId = 0
     lastDetectedRef.current = null
-    grantedAnnouncedRef.current = false
     setPermissionState('requesting')
     setErrorMessage(null)
     setTorchSupported(false)
     setTorchOn(false)
-    let frameCount = 0
-    setDebugInfo({ frames: 0, lastError: '', videoSize: '' })
+    setDebugInfo({ attempts: 0, videoSize: '', lastError: '' })
 
     const hints = new Map()
     hints.set(DecodeHintType.POSSIBLE_FORMATS, POSSIBLE_FORMATS)
     hints.set(DecodeHintType.TRY_HARDER, true)
     const reader = new BrowserMultiFormatReader(hints)
 
-    reader
-      .decodeFromConstraints({ video: VIDEO_CONSTRAINTS }, videoRef.current ?? undefined, (result, err, controls) => {
-        if (cancelled) {
-          controls.stop()
-          return
-        }
-        if (!grantedAnnouncedRef.current) {
-          grantedAnnouncedRef.current = true
-          setPermissionState('granted')
-          setTorchSupported(typeof controls.switchTorch === 'function')
-        }
-        frameCount++
-        const video = videoRef.current
-        if (frameCount % 10 === 0 || result) {
-          setDebugInfo({
-            frames: frameCount,
-            lastError: err ? err.constructor.name : '',
-            videoSize: video ? `${video.videoWidth}x${video.videoHeight}` : '',
-          })
-        }
-        if (!result) return // NotFoundException על כל פריים בלי ברקוד — צפוי, לא שגיאה.
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
+    let attempts = 0
+
+    function scheduleNext(fn: () => void) {
+      // requestAnimationFrame מושהה כשהטאב לא גלוי; timeout רגיל מבטיח שהלולאה תמשיך
+      // גם אם הדפדפן מעדיף לצייר פחות, ומאפשר לנו לקצב את הקצב בעצמנו (SCAN_INTERVAL_MS).
+      timeoutId = window.setTimeout(() => {
+        rafId = requestAnimationFrame(fn)
+      }, SCAN_INTERVAL_MS)
+    }
+
+    function attemptDecode() {
+      if (cancelled) return
+      const video = videoRef.current
+      if (!video || video.videoWidth === 0 || !ctx) {
+        scheduleNext(attemptDecode)
+        return
+      }
+      const vw = video.videoWidth
+      const vh = video.videoHeight
+      const roiW = Math.round(vw * ROI_WIDTH_RATIO)
+      const roiH = Math.round(vh * ROI_HEIGHT_RATIO)
+      const sx = Math.round((vw - roiW) / 2)
+      const sy = Math.round((vh - roiH) / 2)
+      canvas.width = roiW
+      canvas.height = roiH
+      ctx.drawImage(video, sx, sy, roiW, roiH, 0, 0, roiW, roiH)
+
+      attempts++
+      if (attempts % 5 === 0) {
+        setDebugInfo((d) => ({ attempts, videoSize: `${vw}x${vh}`, lastError: d.lastError }))
+      }
+
+      try {
+        const result = reader.decodeFromCanvas(canvas)
         const text = result.getText()
-        // מניעת זיהוי כפול לאותו ברקוד ברצף פריימים (עד שהמשתמשת סוגרת/סורקת מוצר אחר).
-        if (text === lastDetectedRef.current) return
-        lastDetectedRef.current = text
-        controls.stop()
-        controlsRef.current = null
-        onDetected(text)
-      })
-      .then((controls) => {
-        // אם נסגר בזמן שהמתנו להרשאת המצלמה — סוגרים מיד את ה-stream שהתקבל, בלי להציג אותו.
-        if (cancelled) {
-          controls.stop()
+        // מניעת זיהוי כפול לאותו ברקוד ברצף (עד שסוגרים/סורקים מוצר אחר).
+        if (text !== lastDetectedRef.current) {
+          lastDetectedRef.current = text
+          stopStream()
+          onDetected(text)
           return
         }
-        controlsRef.current = controls
-        if (!grantedAnnouncedRef.current) {
-          grantedAnnouncedRef.current = true
-          setPermissionState('granted')
-          setTorchSupported(typeof controls.switchTorch === 'function')
+      } catch (err) {
+        // NotFoundException על אזור בלי ברקוד ברור זה המצב הרגיל בכל ניסיון שלא מצליח — לא שגיאה.
+        // סוג אחר (לא צפוי) עדיין לא עוצר את הסריקה, רק מוצג בדיאגנוסטיקה למקרה שיש בעיה אמיתית.
+        if (!(err instanceof NotFoundException) && attempts % 5 === 0) {
+          setDebugInfo((d) => ({ ...d, lastError: err instanceof Error ? err.constructor.name : String(err) }))
         }
-      })
-      .catch((err: unknown) => {
+      }
+      scheduleNext(attemptDecode)
+    }
+
+    function stopStream() {
+      window.clearTimeout(timeoutId)
+      cancelAnimationFrame(rafId)
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+
+    ;(async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS })
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        streamRef.current = stream
+        const video = videoRef.current
+        if (!video) return
+        video.srcObject = stream
+        await video.play().catch(() => {})
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+
+        setPermissionState('granted')
+        setTorchSupported(BrowserCodeReader.mediaStreamIsTorchCompatible(stream))
+
+        attemptDecode()
+      } catch (err) {
         if (cancelled) return
         setPermissionState('error')
         const name = err instanceof Error ? err.name : ''
@@ -111,33 +159,44 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
         } else {
           setErrorMessage('לא ניתן להפעיל את המצלמה. אפשר להזין את הברקוד ידנית.')
         }
-      })
+      }
+    })()
 
     return () => {
       cancelled = true
-      controlsRef.current?.stop()
-      controlsRef.current = null
+      window.clearTimeout(timeoutId)
+      cancelAnimationFrame(rafId)
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
 
   async function toggleTorch() {
-    const controls = controlsRef.current
-    if (!controls?.switchTorch) return
+    const stream = streamRef.current
+    const track = stream?.getVideoTracks()[0]
+    if (!track) return
     const next = !torchOn
-    await controls.switchTorch(next)
-    setTorchOn(next)
+    try {
+      await BrowserCodeReader.mediaStreamSetTorch(track, next)
+      setTorchOn(next)
+    } catch {
+      // פנס לא נתמך בפועל למרות שהמכשיר הצהיר על תמיכה - מתעלמים, הכפתור פשוט לא יעשה כלום.
+    }
   }
 
   if (!active) return null
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-control bg-ink-900">
+      <div className="relative aspect-video w-full overflow-hidden rounded-control bg-ink-900">
         <video ref={videoRef} className="h-full w-full object-cover" muted playsInline aria-hidden />
         {permissionState === 'granted' && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <div className="h-28 w-4/5 rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+            <div
+              className="rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+              style={{ width: `${ROI_WIDTH_RATIO * 100}%`, height: `${ROI_HEIGHT_RATIO * 100}%` }}
+            />
             <p className="rounded-full bg-black/50 px-3 py-1 text-caption font-medium text-white">
               כוונו את הברקוד למסגרת, כ-10 ס״מ מהמצלמה, באור טוב וללא תזוזה
             </p>
@@ -165,7 +224,8 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
 
       {permissionState === 'granted' && (
         <p className="text-center font-mono text-micro text-ink-400" dir="ltr">
-          frames: {debugInfo.frames} · video: {debugInfo.videoSize || '?'} · last: {debugInfo.lastError || '—'}
+          attempts: {debugInfo.attempts} · video: {debugInfo.videoSize || '?'}
+          {debugInfo.lastError && ` · err: ${debugInfo.lastError}`}
         </p>
       )}
 
