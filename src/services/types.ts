@@ -3,7 +3,9 @@ import type {
   FavoriteMeal,
   Meal,
   MealInput,
+  MealItemInput,
   MealPlan,
+  MealType,
   OnboardingInput,
   PlannedMeal,
   Profile,
@@ -69,9 +71,18 @@ export interface PlanService {
   moveToJournal(userId: string, plannedMeal: PlannedMeal, targetDate: string): Promise<Meal>
 }
 
+export interface FavoriteMealInput {
+  name: string
+  mealType: MealType | null
+  items: MealItemInput[]
+  note: string | null
+}
+
 export interface FavoritesService {
   listFavorites(userId: string): Promise<FavoriteMeal[]>
   addFavoriteFromMeal(userId: string, meal: Meal, name: string): Promise<FavoriteMeal>
+  /** יצירת ארוחה מהירה חדשה מאפס (לא מארוחה קיימת ביומן) — לתצוגת "ארוחות מהירות". */
+  createFavorite(userId: string, input: FavoriteMealInput): Promise<FavoriteMeal>
   deleteFavorite(userId: string, id: string): Promise<void>
 }
 

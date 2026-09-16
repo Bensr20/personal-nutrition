@@ -33,6 +33,22 @@ export const supabaseFavoritesService: FavoritesService = {
     return mapFavoriteMeal(data)
   },
 
+  async createFavorite(userId, input) {
+    const { data, error } = await supabase!
+      .from('favorite_meals')
+      .insert({
+        user_id: userId,
+        name: input.name,
+        meal_type: input.mealType,
+        items: input.items,
+        note: input.note,
+      })
+      .select('*')
+      .single()
+    if (error) throw new Error(error.message)
+    return mapFavoriteMeal(data)
+  },
+
   async deleteFavorite(userId, id) {
     const { error } = await supabase!.from('favorite_meals').delete().eq('id', id).eq('user_id', userId)
     if (error) throw new Error(error.message)

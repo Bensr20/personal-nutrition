@@ -6,6 +6,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
 import { TodayPage } from '@/pages/TodayPage'
 import { JournalPage } from '@/pages/JournalPage'
+import { QuickMealsPage } from '@/pages/QuickMealsPage'
 import { PlanPage } from '@/pages/PlanPage'
 import { ProgressPage } from '@/pages/ProgressPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -44,6 +45,14 @@ export default function App() {
         element={
           <RequireAuth>
             <JournalPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/favorites"
+        element={
+          <RequireAuth>
+            <QuickMealsPage />
           </RequireAuth>
         }
       />

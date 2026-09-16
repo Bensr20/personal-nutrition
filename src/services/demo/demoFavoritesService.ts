@@ -36,6 +36,23 @@ export const demoFavoritesService: FavoritesService = {
     })
   },
 
+  async createFavorite(userId, input) {
+    return mutateDemoData((data) => {
+      const id = newId()
+      const favorite = {
+        id,
+        userId,
+        name: input.name,
+        mealType: input.mealType,
+        items: input.items.map((it) => ({ ...it })),
+        note: input.note,
+        createdAt: new Date().toISOString(),
+      }
+      data.favoriteMeals[id] = favorite
+      return favorite
+    })
+  },
+
   async deleteFavorite(userId, id) {
     mutateDemoData((data) => {
       const existing = data.favoriteMeals[id]

@@ -7,7 +7,7 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 backdrop-blur pb-[env(safe-area-inset-bottom)] sm:hidden"
       aria-label="ניווט ראשי"
     >
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-5">
         {NAV_ITEMS.map((item) => (
           <li key={item.to}>
             <NavLink

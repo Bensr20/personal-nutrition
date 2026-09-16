@@ -1,4 +1,4 @@
-import { Home, BookOpen, CalendarDays, TrendingUp } from '@/components/ui/icons'
+import { Home, BookOpen, CalendarDays, TrendingUp, Star } from '@/components/ui/icons'
 import type { ComponentType } from 'react'
 
 export interface NavItem {
@@ -10,6 +10,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/today', label: 'היום שלי', icon: Home },
   { to: '/journal', label: 'יומן', icon: BookOpen },
+  { to: '/favorites', label: 'ארוחות מהירות', icon: Star },
   { to: '/plan', label: 'התוכנית שלי', icon: CalendarDays },
   { to: '/progress', label: 'התקדמות', icon: TrendingUp },
 ]
