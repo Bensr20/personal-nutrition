@@ -16,6 +16,16 @@ type PermissionState = 'requesting' | 'granted' | 'error'
 
 const POSSIBLE_FORMATS = [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A]
 
+// facingMode בלבד (בלי רזולוציה) משאיר לדפדפן לבחור סטרים ברירת מחדל, שלעיתים נמוך/מטושטש מדי
+// לפענוח ברקוד. מבקשים רזולוציה גבוהה ופוקוס רציף במפורש; advanced מתעלם בבטחה מאילוצים
+// שהמכשיר לא תומך בהם (לא זורק שגיאה כמו אילוץ exact/mandatory היה עושה).
+const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
+  facingMode: 'environment',
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+  advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
+}
+
 export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
@@ -38,10 +48,11 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
 
     const hints = new Map()
     hints.set(DecodeHintType.POSSIBLE_FORMATS, POSSIBLE_FORMATS)
+    hints.set(DecodeHintType.TRY_HARDER, true)
     const reader = new BrowserMultiFormatReader(hints)
 
     reader
-      .decodeFromVideoDevice(undefined, videoRef.current ?? undefined, (result, _err, controls) => {
+      .decodeFromConstraints({ video: VIDEO_CONSTRAINTS }, videoRef.current ?? undefined, (result, _err, controls) => {
         if (cancelled) {
           controls.stop()
           return
@@ -113,7 +124,9 @@ export function BarcodeScannerPanel({ active, onDetected, onManualEntry }: Props
         {permissionState === 'granted' && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
             <div className="h-28 w-4/5 rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-            <p className="rounded-full bg-black/50 px-3 py-1 text-caption font-medium text-white">כוונו את הברקוד לתוך המסגרת</p>
+            <p className="rounded-full bg-black/50 px-3 py-1 text-caption font-medium text-white">
+              כוונו את הברקוד למסגרת, כ-10 ס״מ מהמצלמה, באור טוב וללא תזוזה
+            </p>
           </div>
         )}
         {permissionState === 'requesting' && (
