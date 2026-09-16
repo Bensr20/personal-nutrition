@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-bg text-ink-700 font-sans antialiased text-body;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  h1, h2, h3 {
+    @apply font-bold text-ink-900;
+  }
+
+  button, input, textarea, select {
+    font-family: inherit;
+  }
+
+  input, textarea, select {
+    @apply text-body text-ink-900;
+  }
+
+  ::selection {
+    @apply bg-primary-100 text-primary-700;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Motion המבוסס-JS (Modal, WeekDayPicker) מטפל ב-reduced-motion בעצמו דרך useReducedMotion —
+   הכלל כאן חל רק על אנימציות CSS keyframe (animate-fade-in/pop/sheet-up). במקום להעלים
+   תנועה/משוב לגמרי (transition ל-0.001ms על הכל, כולל hover/focus states), מבטלים רק תזוזה
+   מרחבית וקנה-מידה ומשאירים fade קצר — כדי שעדיין יהיה משוב ויזואלי נגיש על שינוי מצב. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-fade-in,
+  .animate-pop,
+  .animate-sheet-up {
+    animation-name: reduced-fade;
+    animation-duration: 120ms;
+    animation-timing-function: ease-out;
+  }
+}
+
+@keyframes reduced-fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}

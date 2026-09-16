@@ -1,0 +1,57 @@
+{
+  "generatedAt": "2026-09-16T08:20:00.000Z",
+  "source": "Open Food Facts — 3 ברקודים שאומתו ידנית (ראו README/מסמך המסירה)",
+  "items": [
+    {
+      "id": "off:7290004127329",
+      "source": "off",
+      "sourceId": "7290004127329",
+      "originalName": "קוטג' 5%",
+      "displayNameHe": "קוטג' 5%",
+      "englishName": null,
+      "brand": "תנובה",
+      "barcode": "7290004127329",
+      "imageUrl": null,
+      "per100": { "kcal": 95, "proteinG": 11, "carbsG": 1.5, "fatG": 5 },
+      "baseUnit": "g",
+      "units": [{ "code": "package", "labelHe": "אריזה (250 גרם)", "grams": 250 }],
+      "fetchedAt": "2026-09-16T08:20:00.000Z",
+      "sourceUpdatedAt": "2026-05-06",
+      "verified": true
+    },
+    {
+      "id": "off:7290005992735",
+      "source": "off",
+      "sourceId": "7290005992735",
+      "originalName": "לאבנה גבינה 5% שומן",
+      "displayNameHe": "לאבנה גבינה 5% שומן",
+      "englishName": null,
+      "brand": "גד",
+      "barcode": "7290005992735",
+      "imageUrl": null,
+      "per100": { "kcal": 87, "proteinG": 8.5, "carbsG": 2, "fatG": 5 },
+      "baseUnit": "g",
+      "units": [{ "code": "serving", "labelHe": "מנה (30 גרם)", "grams": 30 }],
+      "fetchedAt": "2026-09-16T08:20:00.000Z",
+      "sourceUpdatedAt": "2026-04-24",
+      "verified": true
+    },
+    {
+      "id": "off:7290006492685",
+      "source": "off",
+      "sourceId": "7290006492685",
+      "originalName": "לאבנה עיזים גד 5%",
+      "displayNameHe": "לאבנה עיזים גד 5%",
+      "englishName": "Goat cheese labane",
+      "brand": "Gad",
+      "barcode": "7290006492685",
+      "imageUrl": null,
+      "per100": { "kcal": 92, "proteinG": 5.3, "carbsG": 6.5, "fatG": 5 },
+      "baseUnit": "g",
+      "units": [{ "code": "serving", "labelHe": "מנה (100 גרם)", "grams": 100 }],
+      "fetchedAt": "2026-09-16T08:20:00.000Z",
+      "sourceUpdatedAt": "2021-10-01",
+      "verified": true
+    }
+  ]
+}
