@@ -34,6 +34,13 @@ export interface FoodSearchResult {
   score: number
 }
 
+/** "היחידה שלי" — משקל שהמשתמש קבע ושמר בעצמו למוצר ספציפי (למשל "הקערה שלי" לקורנפלקס). */
+export interface UserFoodUnit {
+  id: string
+  label: string
+  grams: number
+}
+
 export interface UserFoodInput {
   displayName: string
   brand: string | null
@@ -58,4 +65,7 @@ export interface FoodCatalogService {
    * שהמשתמש ביצע למוצר קיים מקבל עדיפות בסריקות הבאות.
    */
   findUserFoodByBarcode(userId: string, barcode: string): Promise<FoodCatalogItem | null>
+  /** יחידות אישיות שנשמרו למוצר הספציפי הזה בלבד (לא לכל מוצרי הקטגוריה). */
+  listUserFoodUnits(userId: string, source: FoodSource, sourceId: string): Promise<UserFoodUnit[]>
+  saveUserFoodUnit(userId: string, source: FoodSource, sourceId: string, label: string, grams: number): Promise<UserFoodUnit>
 }

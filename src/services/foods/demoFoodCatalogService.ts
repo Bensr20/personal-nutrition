@@ -2,7 +2,7 @@ import { newId } from '@/lib/id'
 import { mutateDemoData } from '@/services/demo/demoStore'
 import type { DemoUserFood } from '@/services/demo/demoStore'
 import { FoodCatalogIndex } from './foodCatalogIndex'
-import type { FoodCatalogItem, FoodCatalogService, UserFoodInput } from './foodTypes'
+import type { FoodCatalogItem, FoodCatalogService, UserFoodInput, UserFoodUnit } from './foodTypes'
 
 let indexPromise: Promise<FoodCatalogIndex> | null = null
 
@@ -93,5 +93,32 @@ export const demoFoodCatalogService: FoodCatalogService = {
       Object.values(data.userFoods).find((f) => f.userId === userId && f.barcode === barcode),
     )
     return record ? userFoodToCatalogItem(record) : null
+  },
+
+  async listUserFoodUnits(userId, source, sourceId) {
+    const records = await mutateDemoData((data) =>
+      Object.values(data.userFoodUnits).filter((u) => u.userId === userId && u.foodSource === source && u.foodSourceId === sourceId),
+    )
+    return records.map((u): UserFoodUnit => ({ id: u.id, label: u.label, grams: u.grams }))
+  },
+
+  async saveUserFoodUnit(userId, source, sourceId, label, grams) {
+    return mutateDemoData((data) => {
+      // שמירה חוזרת עם אותו שם ("הקערה שלי") מעדכנת את המשקל הקיים במקום ליצור כפילות.
+      const existing = Object.values(data.userFoodUnits).find(
+        (u) => u.userId === userId && u.foodSource === source && u.foodSourceId === sourceId && u.label === label,
+      )
+      const id = existing?.id ?? newId()
+      data.userFoodUnits[id] = {
+        id,
+        userId,
+        foodSource: source,
+        foodSourceId: sourceId,
+        label,
+        grams,
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+      }
+      return { id, label, grams }
+    })
   },
 }

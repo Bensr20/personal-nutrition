@@ -3,6 +3,7 @@ import { addDays, todayKey } from '@/lib/dateUtils'
 import type {
   ActivityLog,
   FavoriteMeal,
+  FoodSource,
   Meal,
   MealPlan,
   PlannedMeal,
@@ -24,6 +25,16 @@ export interface DemoUserFood {
   createdAt: string
 }
 
+export interface DemoUserFoodUnit {
+  id: string
+  userId: string
+  foodSource: FoodSource
+  foodSourceId: string
+  label: string
+  grams: number
+  createdAt: string
+}
+
 const STORAGE_KEY = 'personal-nutrition:demo-data:v1'
 const SESSION_KEY = 'personal-nutrition:demo-session:v1'
 
@@ -39,6 +50,7 @@ export interface DemoData {
   plannedMeals: Record<string, PlannedMeal>
   favoriteMeals: Record<string, FavoriteMeal>
   userFoods: Record<string, DemoUserFood>
+  userFoodUnits: Record<string, DemoUserFoodUnit>
 }
 
 function emptyData(): DemoData {
@@ -52,6 +64,7 @@ function emptyData(): DemoData {
     plannedMeals: {},
     favoriteMeals: {},
     userFoods: {},
+    userFoodUnits: {},
   }
 }
 
@@ -168,6 +181,7 @@ function load(): DemoData {
     }
     const parsed = JSON.parse(raw) as DemoData
     if (!parsed.userFoods) parsed.userFoods = {}
+    if (!parsed.userFoodUnits) parsed.userFoodUnits = {}
     return parsed
   } catch {
     return seedData()

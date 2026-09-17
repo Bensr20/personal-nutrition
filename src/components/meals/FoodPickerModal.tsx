@@ -4,14 +4,14 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
 import { FormActions } from '@/components/ui/FormActions'
 import { Spinner, EmptyState } from '@/components/ui/Misc'
-import { Search, ScanBarcode, AlertCircle, Flame } from '@/components/ui/icons'
+import { Search, ScanBarcode, AlertCircle, Flame, Plus } from '@/components/ui/icons'
 import { foodCatalogService } from '@/services'
 import { sanitizeBarcode } from '@/services/foods/offClient'
 import { resolveProductByBarcode, OffError } from '@/services/foods/barcodeResolver'
 import { listSelectableUnits, findUnit, resolveAmountGrams, GRAMS_UNIT } from '@/services/foods/unitConversion'
 import { computeItemNutrition, roundForDisplay } from '@/lib/nutritionCalc'
 import type { ParsedFoodText } from '@/lib/foodTextParser'
-import type { FoodCatalogItem, FoodSearchResult } from '@/services/foods/foodTypes'
+import type { FoodCatalogItem, FoodSearchResult, UserFoodUnit } from '@/services/foods/foodTypes'
 import type { MealItemInput } from '@/types/domain'
 import { useAuth } from '@/context/AuthContext'
 
@@ -58,6 +58,10 @@ export function FoodPickerModal({ open, onClose, onSelect, initialParsed }: Prop
   const [gramsPerUnit, setGramsPerUnit] = useState(1)
   const [quantity, setQuantity] = useState(1)
   const [manualForm, setManualForm] = useState(emptyManualForm())
+  const [personalUnits, setPersonalUnits] = useState<UserFoodUnit[]>([])
+  const [addingPersonalUnit, setAddingPersonalUnit] = useState(false)
+  const [newUnitLabel, setNewUnitLabel] = useState('')
+  const [newUnitGrams, setNewUnitGrams] = useState('')
 
   useEffect(() => {
     if (!open) {
@@ -105,6 +109,24 @@ export function FoodPickerModal({ open, onClose, onSelect, initialParsed }: Prop
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [query, open, user, step])
+
+  // "היחידה שלי" — יחידות שהמשתמש שמר לעצמו למוצר הספציפי הזה (לא ניחוש של האפליקציה).
+  useEffect(() => {
+    setAddingPersonalUnit(false)
+    setNewUnitLabel('')
+    setNewUnitGrams('')
+    if (!user || !selected) {
+      setPersonalUnits([])
+      return
+    }
+    let cancelled = false
+    foodCatalogService.listUserFoodUnits(user.id, selected.source, selected.sourceId).then((list) => {
+      if (!cancelled) setPersonalUnits(list)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [user, selected])
 
   /** בוחר יחידה/כמות לפי הפענוח החופשי כשקיים (למשל "חצי גביע") — עדיין מציג את שלב הכמות לאישור. */
   function selectWithParsedQuantity(item: FoodCatalogItem, parsed: ParsedFoodText) {
@@ -163,12 +185,44 @@ export function FoodPickerModal({ open, onClose, onSelect, initialParsed }: Prop
     await resolveAndProceed(sanitized)
   }
 
-  const units = selected ? listSelectableUnits(selected) : [GRAMS_UNIT]
+  const personalUnitOptions = personalUnits.map((u) => ({ code: `personal:${u.id}`, labelHe: u.label, grams: u.grams }))
+  const units = selected ? [...listSelectableUnits(selected), ...personalUnitOptions] : [GRAMS_UNIT]
 
   function handleUnitChange(code: string) {
     setUnitCode(code)
+    const personal = personalUnitOptions.find((u) => u.code === code)
+    if (personal) {
+      setGramsPerUnit(personal.grams)
+      return
+    }
     const unit = selected ? findUnit(selected, code) : null
     setGramsPerUnit(unit?.grams ?? 1)
+  }
+
+  async function saveNewPersonalUnit() {
+    if (!user || !selected) return
+    const label = newUnitLabel.trim()
+    const grams = Number(newUnitGrams)
+    if (!label) {
+      setError('נא לתת שם ליחידה, למשל "הקערה שלי"')
+      return
+    }
+    if (!(grams > 0)) {
+      setError('נא להזין משקל בגרם גדול מאפס')
+      return
+    }
+    setError(null)
+    try {
+      const saved = await foodCatalogService.saveUserFoodUnit(user.id, selected.source, selected.sourceId, label, grams)
+      setPersonalUnits((prev) => [...prev.filter((u) => u.id !== saved.id), saved])
+      setUnitCode(`personal:${saved.id}`)
+      setGramsPerUnit(saved.grams)
+      setAddingPersonalUnit(false)
+      setNewUnitLabel('')
+      setNewUnitGrams('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שמירת היחידה נכשלה')
+    }
   }
 
   const amountGrams = selected ? resolveAmountGrams(quantity, gramsPerUnit) : 0
@@ -414,6 +468,52 @@ export function FoodPickerModal({ open, onClose, onSelect, initialParsed }: Prop
               value={gramsPerUnit}
               onChange={(e) => setGramsPerUnit(Number(e.target.value))}
             />
+          )}
+
+          {!addingPersonalUnit ? (
+            <button
+              type="button"
+              onClick={() => setAddingPersonalUnit(true)}
+              className="flex items-center gap-1 self-start text-caption font-semibold text-primary-600 transition-colors hover:text-primary-700"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              שמירת "היחידה שלי" למוצר הזה (למשל "הקערה שלי")
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2 rounded-control border border-dashed border-ink-200 p-3">
+              <span className="text-caption text-ink-500">
+                נשמר רק למוצר הספציפי הזה — לא ניחוש של האפליקציה, אתם קובעים את המשקל.
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newUnitLabel}
+                  onChange={(e) => setNewUnitLabel(e.target.value)}
+                  placeholder='למשל: "הקערה שלי"'
+                  aria-label="שם היחידה האישית"
+                  className="h-11 min-w-0 flex-[2] rounded-control border border-ink-200 bg-white px-3 text-body text-ink-900 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
+                />
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.1"
+                  value={newUnitGrams}
+                  onChange={(e) => setNewUnitGrams(e.target.value)}
+                  placeholder="גרם"
+                  aria-label="משקל בגרם"
+                  className="h-11 w-24 rounded-control border border-ink-200 bg-white px-3 text-body text-ink-900 tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="md" onClick={() => setAddingPersonalUnit(false)}>
+                  ביטול
+                </Button>
+                <Button type="button" variant="secondary" size="md" onClick={saveNewPersonalUnit}>
+                  שמירה
+                </Button>
+              </div>
+            </div>
           )}
 
           <div className="rounded-control bg-bg p-3.5">

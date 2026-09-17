@@ -170,4 +170,30 @@ export const supabaseFoodCatalogService: FoodCatalogService = {
     if (error || !data) return null
     return userRowToItem(data)
   },
+
+  async listUserFoodUnits(userId, source, sourceId) {
+    const { data, error } = await supabase!
+      .from('user_food_units')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('food_source', source)
+      .eq('food_source_id', sourceId)
+    if (error) throw new Error(error.message)
+    return (data ?? []).map((row) => ({ id: row.id, label: row.label, grams: Number(row.grams) }))
+  },
+
+  async saveUserFoodUnit(userId, source, sourceId, label, grams) {
+    // upsert על אותו אילוץ ייחודיות: שמירה חוזרת עם אותו שם ("הקערה שלי") מעדכנת את המשקל
+    // במקום ליצור כפילות, כך שאפשר לתקן טעות בלי למחוק ולהוסיף מחדש.
+    const { data, error } = await supabase!
+      .from('user_food_units')
+      .upsert(
+        { user_id: userId, food_source: source, food_source_id: sourceId, label, grams },
+        { onConflict: 'user_id,food_source,food_source_id,label' },
+      )
+      .select('*')
+      .single()
+    if (error) throw new Error(error.message)
+    return { id: data.id, label: data.label, grams: Number(data.grams) }
+  },
 }
