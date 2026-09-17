@@ -471,25 +471,54 @@ export function FoodPickerModal({ open, onClose, onSelect, initialParsed }: Prop
           )}
 
           {!addingPersonalUnit ? (
-            <button
-              type="button"
-              onClick={() => setAddingPersonalUnit(true)}
-              className="flex items-center gap-1 self-start text-caption font-semibold text-primary-600 transition-colors hover:text-primary-700"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              שמירת "היחידה שלי" למוצר הזה (למשל "הקערה שלי")
-            </button>
+            selected.units.length === 0 && personalUnitOptions.length === 0 ? (
+              <div className="flex flex-col gap-2 rounded-control border border-primary-200 bg-primary-50 p-3">
+                <p className="text-caption font-medium text-primary-700">
+                  למוצר הזה אין "כף"/"כפית" מהמקור — רק גרם. כל מוצר שוקל אחרת ליחידה (כפית דבש ≠ כפית שמן זית), אז
+                  האפליקציה לא מנחשת. אפשר להוסיף יחידה כמו "כפית" פעם אחת, ונשמר תמיד למוצר הזה בלבד.
+                </p>
+                <Button type="button" variant="secondary" size="md" className="self-start" onClick={() => setAddingPersonalUnit(true)}>
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  הוספת יחידה, למשל "כפית"
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddingPersonalUnit(true)}
+                className="flex items-center gap-1 self-start text-caption font-semibold text-primary-600 transition-colors hover:text-primary-700"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                שמירת "היחידה שלי" למוצר הזה (למשל "הקערה שלי")
+              </button>
+            )
           ) : (
             <div className="flex flex-col gap-2 rounded-control border border-dashed border-ink-200 p-3">
               <span className="text-caption text-ink-500">
                 נשמר רק למוצר הספציפי הזה — לא ניחוש של האפליקציה, אתם קובעים את המשקל.
               </span>
+              <div className="flex flex-wrap gap-1.5">
+                {['כפית', 'כף', 'כוס', 'פרוסה', 'יחידה'].map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setNewUnitLabel(label)}
+                    className={`rounded-full border px-2.5 py-1 text-caption transition-colors ${
+                      newUnitLabel === label
+                        ? 'border-primary-400 bg-primary-100 text-primary-700'
+                        : 'border-ink-200 text-ink-600 hover:border-primary-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={newUnitLabel}
                   onChange={(e) => setNewUnitLabel(e.target.value)}
-                  placeholder='למשל: "הקערה שלי"'
+                  placeholder='למשל: "כפית"'
                   aria-label="שם היחידה האישית"
                   className="h-11 min-w-0 flex-[2] rounded-control border border-ink-200 bg-white px-3 text-body text-ink-900 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400"
                 />
